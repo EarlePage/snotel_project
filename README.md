@@ -1,1 +1,2 @@
 # snotel_project
+Shiny app utilizing data from the timberline snotel site, with data extracted from USFS. Included download script can be used to download from specific snotel sites using the snotelr package.

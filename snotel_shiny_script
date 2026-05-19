@@ -1,0 +1,97 @@
+library(shiny)
+library(shinydashboard)
+library(snotelr)
+library(weathR)
+library(tidyverse)
+library(leaflet)
+library(ggplot2)
+library(plotly)
+library(dplyr)
+
+# Station metadata for Mt. Hood Test Site (ID: 651)
+SITE_ID <- 651
+LAT <- 45.32
+LON <- -121.72
+
+ui <- dashboardPage(
+  dashboardHeader(title = "Mt. Hood Test Site Monitor"),
+  dashboardSidebar(disable = TRUE),
+  dashboardBody(
+    fluidRow(
+      valueBoxOutput("snow_box", width = 3),
+      valueBoxOutput("depth_box", width = 3),
+      valueBoxOutput("temp_box", width = 3),
+      valueBoxOutput("precip_box", width = 3)
+    ),
+    fluidRow(
+      box(title = "Historical Snowpack Trends (SWE)", status = "primary", solidHeader = TRUE,
+          plotlyOutput("snow_plot"), width = 12)
+    ),
+    fluidRow(
+      box(title = "7-Day Forecast", status = "info", solidHeader = TRUE,
+          tableOutput("forecast_table"), width = 12)
+    )
+  )
+)
+
+server <- function(input, output) {
+  
+  # Fetch data
+  snow_data <- reactive({
+    snotel_download(site_id = SITE_ID, internal = TRUE)
+  })
+  
+  forecast_data <- reactive({
+    weathR::point_forecast(lat = LAT, lon = LON)
+  })
+  
+  # 1. Snow Water Equivalent Box
+  output$snow_box <- renderValueBox({
+    latest <- tail(snow_data(), 1)
+    snow_in <- round(latest$snow_water_equivalent / 25.4, 4)
+    valueBox(paste0(snow_in, "in"), "Snow Water Equiv.", 
+             icon = icon("snowflake"), color = "blue")
+  })
+  
+  # 2. Snow Depth Box (MOVED INSIDE SERVER)
+  output$depth_box <- renderValueBox({
+    latest <- tail(snow_data(), 1)
+    depth_in <- round(latest$snow_depth / 25.4, 4)
+    valueBox(paste0(depth_in, "in"), "Snow Depth", 
+             icon = icon("ruler-vertical"), color = "purple")
+  })
+  
+  # 3. Max Temp Box
+  output$temp_box <- renderValueBox({
+    latest <- tail(snow_data(), 1)
+    valueBox(paste0(latest$temperature_max, "°C"), "Max Temp (24h)", 
+             icon = icon("thermometer-half"), color = "orange")
+  })
+  
+  # 4. Precipitation Box
+  output$precip_box <- renderValueBox({
+    latest <- tail(snow_data(), 1)
+    precip_in <- round(latest$precipitation_cumulative /25.4, 4)
+    valueBox(paste0(precip_in, "in"), "Yearly Precip", 
+             icon = icon("cloud-rain"), color = "teal")
+  })
+  
+  # 5. Plot
+  output$snow_plot <- renderPlotly({
+    df <- snow_data()
+    p <- ggplot(df, aes(x = as.Date(date), y = snow_water_equivalent)) +
+      geom_line(color = "black") +
+      labs(x = "Date", y = "SWE (mm)") +
+      theme_minimal()
+    ggplotly(p)
+  })
+  
+  # 6. Forecast Table
+  output$forecast_table <- renderTable({
+    forecast_data() %>%
+      select(startTime, name, temperature, shortForecast) %>%
+      head(7)
+  })
+} # End of Server
+
+shinyApp(ui, server)
